@@ -1,0 +1,7 @@
+# Device endpoints authenticate their own per-device bearer tokens.
+# Keep SUPABASE_SERVICE_ROLE_KEY as a server-side Supabase secret only.
+[functions.device-ingest]
+verify_jwt = false
+
+[functions.device-commands]
+verify_jwt = false
