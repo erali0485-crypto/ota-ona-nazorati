@@ -18,7 +18,11 @@
 <div class="card"><h2>📱 Иловалардан фойдаланиш вақти</h2><p class="muted">Фарзанд қурилмасидан юборилган 24 соатлик ҳисобот. Бу бўлим иловалардаги хабарлар мазмунини кўрсатмайди.</p><div class="scroll" id="appusage"></div></div><div class="card"><h2>Охирги ҳисоботлар</h2><div class="scroll" id="reports"></div></div><div class="card"><h2>Воқеалар журнали</h2><div class="scroll" id="events"></div></div>
 </div></main>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script><script>
-const $=id=>document.getElementById(id);let client=null,poll=null,seenEvents=new Set(),alertCount=0,notifyEnabled=false,installPrompt=null;\nif('serviceWorker' in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js').catch(()=>{}));\nwindow.addEventListener('beforeinstallprompt',e=>{e.preventDefault();installPrompt=e;$('install').classList.remove('hidden')});\n$('install').onclick=async()=>{if(installPrompt){installPrompt.prompt();await installPrompt.userChoice;installPrompt=null;$('install').classList.add('hidden')}else msg('Chrome менюсида ⋮ → «Главный экранга қўшиш» ёки «Установить приложение» ни танланг.','good')};\nwindow.addEventListener('appinstalled',()=>msg('Ота-она назорати телефонга ўрнатилди.','good'));
+const $=id=>document.getElementById(id);let client=null,poll=null,seenEvents=new Set(),alertCount=0,notifyEnabled=false,installPrompt=null;
+if('serviceWorker' in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js').catch(()=>{}));
+window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();installPrompt=e;$('install').classList.remove('hidden')});
+$('install').onclick=async()=>{if(installPrompt){installPrompt.prompt();await installPrompt.userChoice;installPrompt=null;$('install').classList.add('hidden')}else msg('Chrome менюсида ⋮ → «Главный экранга қўшиш» ёки «Установить приложение» ни танланг.','good')};
+window.addEventListener('appinstalled',()=>msg('Ота-она назорати телефонга ўрнатилди.','good'));
 function msg(t,cls='muted'){$('msg').className=cls;$('msg').textContent=t}
 function esc(v){return String(v??'—').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
 function table(rows,cols){if(!rows||!rows.length)return '<p class="muted">Ҳозирча маълумот йўқ.</p>';return '<table><thead><tr>'+cols.map(c=>'<th>'+esc(c[1])+'</th>').join('')+'</tr></thead><tbody>'+rows.map(r=>'<tr>'+cols.map(c=>'<td>'+esc(c[2]?c[2](r[c[0]],r):r[c[0]])+'</td>').join('')+'</tr>').join('')+'</tbody></table>'}
