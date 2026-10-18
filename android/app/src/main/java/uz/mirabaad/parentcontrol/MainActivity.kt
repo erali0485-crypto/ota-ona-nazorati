@@ -69,7 +69,7 @@ class MainActivity : Activity() {
     private fun post(body: JSONObject, token: String, key: String): Pair<Int,String> {
         val c=URL(endpoint).openConnection() as HttpURLConnection
         c.requestMethod="POST";c.connectTimeout=12000;c.readTimeout=12000;c.doOutput=true
-        c.setRequestProperty("Content-Type","application/json");c.setRequestProperty("apikey",key);c.setRequestProperty("x-device-token",token)
+        c.setRequestProperty("Content-Type","application/json");c.setRequestProperty("apikey",key);c.setRequestProperty("Authorization","Bearer "+token)
         c.outputStream.use { it.write(body.toString().toByteArray(Charsets.UTF_8)) }
         val code=c.responseCode
         val stream=if(code in 200..299)c.inputStream else c.errorStream
@@ -85,7 +85,7 @@ class MainActivity : Activity() {
         status.text="Статистика серверга юборилмоқда…"
         executor.execute {
             try {
-                val heartbeat=JSONObject().put("kind","heartbeat").put("app_version","1.0.2").put("device_name",nameField.text.toString().trim())
+                val heartbeat=JSONObject().put("kind","heartbeat").put("app_version","1.0.1").put("device_name",nameField.text.toString().trim())
                 val (code,response)=post(heartbeat,t,k)
                 if(code !in 200..299) throw Exception("HTTP $code: $response")
                 val rows=getUsage()
