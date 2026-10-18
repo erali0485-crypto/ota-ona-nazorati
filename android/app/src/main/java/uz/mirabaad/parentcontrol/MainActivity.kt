@@ -8,6 +8,8 @@ import android.content.Intent
 import android.os.Bundle
 import android.provider.Settings
 import android.view.ViewGroup
+import android.webkit.WebView
+import android.webkit.WebViewClient
 import android.widget.*
 import org.json.JSONObject
 import java.net.HttpURLConnection
@@ -22,12 +24,16 @@ class MainActivity : Activity() {
     private lateinit var keyField: EditText
     private lateinit var status: TextView
     private lateinit var usage: TextView
+    private lateinit var rootLayout: LinearLayout
+    private var parentPanelOpen = false
     private val endpoint = "https://dhquvmipvfvvlisfhfaz.supabase.co/functions/v1/device-ingest"
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val root = LinearLayout(this).apply { orientation=LinearLayout.VERTICAL; setPadding(24,24,24,24); setBackgroundColor(0xFFF3F6FB.toInt()) }
+        rootLayout = root
         root.addView(TextView(this).apply { text="ОТА-ОНА НАЗОРАТИ"; textSize=24f; setTextColor(0xFF172554.toInt()) })
+        root.addView(Button(this).apply { text="📊 ОТА-ОНА ПАНЕЛИ — шу илова ичида"; setOnClickListener { openParentPanel() } },params())
         root.addView(TextView(this).apply { text="Фақат ота-она ва боланинг хабардор розилиги билан ишлатилади. Фойдаланиш вақти серверга юборилади."; textSize=14f; setPadding(0,10,0,14) })
         nameField=EditText(this).apply { hint="Қурилма номи"; setText(prefs.getString("name","")) }
         root.addView(nameField,params())
@@ -45,6 +51,30 @@ class MainActivity : Activity() {
         usage=TextView(this).apply { textSize=14f; setTextIsSelectable(true) }
         root.addView(ScrollView(this).apply { addView(usage) },LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,0,1f))
         setContentView(root); showUsage()
+    }
+    private fun openParentPanel() {
+        val web = WebView(this)
+        web.settings.javaScriptEnabled = true
+        web.settings.domStorageEnabled = true
+        web.webViewClient = WebViewClient()
+        web.loadUrl("https://erali0485-crypto.github.io/ota-ona-nazorati/")
+        parentPanelOpen = true
+        setContentView(LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setBackgroundColor(0xFFF3F6FB.toInt())
+            addView(Button(this@MainActivity).apply {
+                text = "← Орқага — ягона илова"
+                setOnClickListener { parentPanelOpen = false; setContentView(rootLayout) }
+            }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+            addView(web, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
+        })
+    }
+    @Deprecated("Deprecated in Java")
+    override fun onBackPressed() {
+        if (parentPanelOpen) {
+            parentPanelOpen = false
+            setContentView(rootLayout)
+        } else super.onBackPressed()
     }
     private fun params()=LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,ViewGroup.LayoutParams.WRAP_CONTENT).apply { bottomMargin=7 }
     private fun hasAccess():Boolean {
