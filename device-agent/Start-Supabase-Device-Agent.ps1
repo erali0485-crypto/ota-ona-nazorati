@@ -71,6 +71,18 @@ while ($true) {
       }
       $ack = Invoke-RestMethod -Method Post -Uri $CommandsEndpoint -Headers $Headers -ContentType 'application/json' -Body $ackBody -TimeoutSec 15
       Add-Content -LiteralPath $LogFile -Value ("{0} COMMAND RESULT status={1}" -f (Get-Date -Format s), $ack.command.status)
+    } elseif ($result.command -and $result.command.action -eq 'show_notification') {
+      $commandId = [string]$result.command.id
+      $message = [string]$result.command.message
+      try {
+        $shell = New-Object -ComObject WScript.Shell
+        [void]$shell.Popup($message, 15, 'Ота-онадан огоҳлантириш', 64)
+        $ackBody = @{ kind='ack'; command_id=$commandId; result='acknowledged'; summary='Windows notification displayed to the signed-in user.' } | ConvertTo-Json -Compress
+        Add-Content -LiteralPath $LogFile -Value ("{0} NOTIFICATION DISPLAYED command_id={1}" -f (Get-Date -Format s), $commandId)
+      } catch {
+        $ackBody = @{ kind='ack'; command_id=$commandId; result='failed'; summary='Could not display Windows notification: '+$_.Exception.Message } | ConvertTo-Json -Compress
+      }
+      $ack = Invoke-RestMethod -Method Post -Uri $CommandsEndpoint -Headers $Headers -ContentType 'application/json' -Body $ackBody -TimeoutSec 15
     }
   } catch {
     Add-Content -LiteralPath $LogFile -Value ("{0} ERROR {1}" -f (Get-Date -Format s), $_.Exception.Message)
