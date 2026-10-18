@@ -28,16 +28,16 @@ class MainActivity : Activity() {
         super.onCreate(savedInstanceState)
         val root = LinearLayout(this).apply { orientation=LinearLayout.VERTICAL; setPadding(24,24,24,24); setBackgroundColor(0xFFF3F6FB.toInt()) }
         root.addView(TextView(this).apply { text="ОТА-ОНА НАЗОРАТИ"; textSize=24f; setTextColor(0xFF172554.toInt()) })
-        root.addView(TextView(this).apply { text="Телефондаги иловалардан фойдаланиш вақтини кўриш ва рухсат билан улаш"; textSize=15f; setPadding(0,10,0,14) })
+        root.addView(TextView(this).apply { text="Фақат ота-она ва боланинг хабардор розилиги билан ишлатилади. Фойдаланиш вақти серверга юборилади."; textSize=14f; setPadding(0,10,0,14) })
         nameField=EditText(this).apply { hint="Қурилма номи"; setText(prefs.getString("name","")) }
         root.addView(nameField,params())
         tokenField=EditText(this).apply { hint="Қурилма токени"; setSingleLine(true); setText(prefs.getString("token","")) }
         root.addView(tokenField,params())
-        keyField=EditText(this).apply { hint="Supabase publishable key"; setSingleLine(true); setText(prefs.getString("key","")) }
+        keyField=EditText(this).apply { hint="Supabase publishable key (sb_publishable_…)"; setSingleLine(true); setText(prefs.getString("key","")) }
         root.addView(keyField,params())
         root.addView(Button(this).apply { text="Фойдаланиш вақтига рухсат бериш"; setOnClickListener { startActivity(Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS)) } },params())
         root.addView(Button(this).apply { text="Охирги 24 соат статистикаси"; setOnClickListener { showUsage() } },params())
-        root.addView(Button(this).apply { text="Сақлаш ва серверга уланиш"; setOnClickListener {
+        root.addView(Button(this).apply { text="Сақлаш ва статистикани серверга юбориш"; setOnClickListener {
             prefs.edit().putString("name",nameField.text.toString().trim()).putString("token",tokenField.text.toString().trim()).putString("key",keyField.text.toString().trim()).apply()
             connect()
         } },params())
@@ -51,32 +51,52 @@ class MainActivity : Activity() {
         val ops=getSystemService(Context.APP_OPS_SERVICE) as AppOpsManager
         return ops.checkOpNoThrow("android:get_usage_stats",android.os.Process.myUid(),packageName)==AppOpsManager.MODE_ALLOWED
     }
-    private fun showUsage() {
-        if(!hasAccess()){ usage.text="Статистикани кўриш учун юқоридаги рухсат тугмасини босинг. Созламаларда «Ота-она назорати»ни топиб, Usage access ни ёқинг."; return }
+    private fun getUsage(): List<Pair<String,Long>> {
+        if(!hasAccess()) return emptyList()
         val now=System.currentTimeMillis()
         val manager=getSystemService(Context.USAGE_STATS_SERVICE) as UsageStatsManager
-        val stats=manager.queryUsageStats(UsageStatsManager.INTERVAL_DAILY,now-86400000L,now).filter { it.totalTimeInForeground>0 }.sortedByDescending { it.totalTimeInForeground }
-        usage.text=if(stats.isEmpty()) "Ҳали статистика йўқ. Иловаларни ишлатиб, қайта текширинг." else "ОХИРГИ 24 СОАТ\n\n"+stats.take(40).joinToString("\n") { s ->
-            val m=s.totalTimeInForeground/60000
-            s.packageName+" — "+(if(m>=60) "${m/60} соат ${m%60} дақиқа" else "${m} дақиқа")
-        }
+        return manager.queryAndAggregateUsageStats(now-86400000L,now).values
+            .filter { it.totalTimeInForeground>0 }
+            .sortedByDescending { it.totalTimeInForeground }
+            .take(30)
+            .map { it.packageName to (it.totalTimeInForeground/60000L) }
+    }
+    private fun showUsage() {
+        if(!hasAccess()){ usage.text="Статистика учун рухсат берилмаган. «Фойдаланиш вақтига рухсат бериш»ни босинг, «Ота-она назорати»ни танланг ва Usage access рухсатини ёқинг."; return }
+        val rows=getUsage()
+        usage.text=if(rows.isEmpty()) "Ҳали статистика йўқ. Иловаларни ишлатиб қайта текширинг." else "ОХИРГИ 24 СОАТ\n\n"+rows.joinToString("\n") { (pkg,m) -> "$pkg — "+(if(m>=60) "${m/60} соат ${m%60} дақиқа" else "$m дақиқа") }
+    }
+    private fun post(body: JSONObject, token: String, key: String): Pair<Int,String> {
+        val c=URL(endpoint).openConnection() as HttpURLConnection
+        c.requestMethod="POST";c.connectTimeout=12000;c.readTimeout=12000;c.doOutput=true
+        c.setRequestProperty("Content-Type","application/json");c.setRequestProperty("apikey",key);c.setRequestProperty("Authorization","Bearer "+token)
+        c.outputStream.use { it.write(body.toString().toByteArray(Charsets.UTF_8)) }
+        val code=c.responseCode
+        val stream=if(code in 200..299)c.inputStream else c.errorStream
+        val response=stream?.bufferedReader()?.use { it.readText() } ?: ""
+        c.disconnect()
+        return code to response
     }
     private fun connect() {
         val t=tokenField.text.toString().trim(); val k=keyField.text.toString().trim()
-        if(t.length<32){status.text="Токен керак: бошқарув тизимида қурилма учун берилган токенни киритинг.";return}
-        if(k.isBlank()){status.text="Supabase publishable key киритилмаган.";return}
-        status.text="Серверга уланиш текширилмоқда…"
+        if(!hasAccess()){ status.text="Аввал Usage access рухсатини ёқинг."; return }
+        if(t.length<32){status.text="Қурилма токени йўқ ёки нотўғри. Серверда қурилма рўйхатга олиниши керак.";return}
+        if(!k.startsWith("sb_publishable_")){status.text="Supabase publishable key sb_publishable_ билан бошланиши керак.";return}
+        status.text="Статистика серверга юборилмоқда…"
         executor.execute {
             try {
-                val body=JSONObject().put("kind","heartbeat").put("app_version","1.0.0")
-                val c=URL(endpoint).openConnection() as HttpURLConnection
-                c.requestMethod="POST";c.connectTimeout=12000;c.readTimeout=12000;c.doOutput=true
-                c.setRequestProperty("Content-Type","application/json");c.setRequestProperty("apikey",k);c.setRequestProperty("Authorization","Bearer "+t)
-                c.outputStream.use { it.write(body.toString().toByteArray(Charsets.UTF_8)) }
-                val code=c.responseCode
-                val stream=if(code in 200..299)c.inputStream else c.errorStream
-                val response=stream?.bufferedReader()?.use { it.readText() } ?: ""
-                runOnUiThread { status.text=if(code in 200..299) "СЕРВЕРГА УЛАНДИ: "+response else "Сервер HTTP "+code+" қайтарди. Рухсат ва токенни текшириш керак." }
+                val heartbeat=JSONObject().put("kind","heartbeat").put("app_version","1.0.1").put("device_name",nameField.text.toString().trim())
+                val (code,response)=post(heartbeat,t,k)
+                if(code !in 200..299) throw Exception("HTTP $code: $response")
+                val rows=getUsage()
+                var sent=0
+                for ((pkg,minutes) in rows) {
+                    val summary=JSONObject().put("package",pkg).put("minutes_24h",minutes).toString()
+                    val (ec,er)=post(JSONObject().put("kind","event").put("event_type","app_usage").put("summary",summary),t,k)
+                    if(ec !in 200..299) throw Exception("Статистика юборишда HTTP $ec: $er")
+                    sent++
+                }
+                runOnUiThread { status.text="СЕРВЕРГА УЛАНДИ. 24 соатлик статистика юборилди: $sent та илова. Панелни янгиланг." }
             } catch(e:Exception) { runOnUiThread { status.text="Уланиш хатоси: "+(e.message ?: "номаълум") } }
         }
     }
