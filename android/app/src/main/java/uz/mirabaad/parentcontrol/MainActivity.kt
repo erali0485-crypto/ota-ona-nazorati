@@ -15,6 +15,12 @@ import org.json.JSONObject
 import java.net.HttpURLConnection
 import java.net.URL
 import java.util.concurrent.Executors
+import androidx.work.Constraints
+import androidx.work.ExistingPeriodicWorkPolicy
+import androidx.work.NetworkType
+import androidx.work.PeriodicWorkRequestBuilder
+import androidx.work.WorkManager
+import java.util.concurrent.TimeUnit
 
 class MainActivity : Activity() {
     private val prefs by lazy { getSharedPreferences("parent_control", Context.MODE_PRIVATE) }
@@ -45,12 +51,14 @@ class MainActivity : Activity() {
         root.addView(Button(this).apply { text="Охирги 24 соат статистикаси"; setOnClickListener { showUsage() } },params())
         root.addView(Button(this).apply { text="Сақлаш ва статистикани серверга юбориш"; setOnClickListener {
             prefs.edit().putString("name",nameField.text.toString().trim()).putString("token",tokenField.text.toString().trim()).putString("key",keyField.text.toString().trim()).apply()
+            scheduleUsageSync()
             connect()
         } },params())
         status=TextView(this).apply { text="Ҳолат: ҳали уланмаган"; textSize=14f; setPadding(0,12,0,12) }; root.addView(status)
         usage=TextView(this).apply { textSize=14f; setTextIsSelectable(true) }
         root.addView(ScrollView(this).apply { addView(usage) },LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,0,1f))
         setContentView(root); showUsage()
+        if (prefs.getString("token", "").orEmpty().length >= 32 && prefs.getString("key", "").orEmpty().startsWith("sb_publishable_")) scheduleUsageSync()
     }
     private fun openParentPanel() {
         val web = WebView(this)
@@ -76,6 +84,12 @@ class MainActivity : Activity() {
             setContentView(rootLayout)
         } else super.onBackPressed()
     }
+    private fun scheduleUsageSync() {
+        val constraints = Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build()
+        val request = PeriodicWorkRequestBuilder<UsageSyncWorker>(15, TimeUnit.MINUTES).setConstraints(constraints).build()
+        WorkManager.getInstance(applicationContext).enqueueUniquePeriodicWork("parent-control-app-usage-sync", ExistingPeriodicWorkPolicy.UPDATE, request)
+        if (::status.isInitialized) status.text = "Автоматик синхронлаш режалаштирилди. Android батарея чекловлари сабаб кечикиши мумкин."
+    }
     private fun params()=LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,ViewGroup.LayoutParams.WRAP_CONTENT).apply { bottomMargin=7 }
     private fun hasAccess():Boolean {
         val ops=getSystemService(Context.APP_OPS_SERVICE) as AppOpsManager
@@ -89,7 +103,13 @@ class MainActivity : Activity() {
             .filter { it.totalTimeInForeground>0 }
             .sortedByDescending { it.totalTimeInForeground }
             .take(30)
-            .map { it.packageName to (it.totalTimeInForeground/60000L) }
+            .map {
+                val label = try {
+                    val info = packageManager.getApplicationInfo(it.packageName, 0)
+                    packageManager.getApplicationLabel(info).toString()
+                } catch (_: Exception) { it.packageName }
+                "\$label|\${it.packageName}" to (it.totalTimeInForeground/60000L)
+            }
     }
     private fun showUsage() {
         if(!hasAccess()){ usage.text="Статистика учун рухсат берилмаган. «Фойдаланиш вақтига рухсат бериш»ни босинг, «Ота-она назорати»ни танланг ва Usage access рухсатини ёқинг."; return }
@@ -121,7 +141,7 @@ class MainActivity : Activity() {
                 val rows=getUsage()
                 var sent=0
                 for ((pkg,minutes) in rows) {
-                    val summary=JSONObject().put("package",pkg).put("minutes_24h",minutes).toString()
+                    val summary=JSONObject().put("package",pkg.substringBefore("|")).put("package_id",pkg.substringAfter("|",pkg)).put("minutes_24h",minutes).put("source","android_usage_stats").toString()
                     val (ec,er)=post(JSONObject().put("kind","event").put("event_type","app_usage").put("summary",summary),t,k)
                     if(ec !in 200..299) throw Exception("Статистика юборишда HTTP $ec: $er")
                     sent++
