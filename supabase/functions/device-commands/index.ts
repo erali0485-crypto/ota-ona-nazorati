@@ -41,7 +41,7 @@ Deno.serve(async (req) => {
       const { data: pending, error } = await db.from("pc_commands")
         .select("id, action, message, created_at")
         .eq("device_id", device.id).eq("owner_id", device.owner_id)
-        .eq("status", "pending").eq("action", "lock_workstation")
+        .eq("status", "pending").in("action", ["lock_workstation", "show_notification"])
         .order("created_at", { ascending: true }).limit(1).maybeSingle();
       if (error) throw error;
       if (!pending) return reply(200, { ok: true, command: null, server_time: now });
@@ -63,13 +63,13 @@ Deno.serve(async (req) => {
       const { data: updated, error } = await db.from("pc_commands")
         .update({ status: result, acknowledged_at: now, message: summary || "lock_workstation result" })
         .eq("id", commandId).eq("device_id", device.id).eq("owner_id", device.owner_id)
-        .eq("action", "lock_workstation").eq("status", "delivered")
+        .in("action", ["lock_workstation", "show_notification"]).eq("status", "delivered")
         .select("id, status, acknowledged_at").maybeSingle();
       if (error) throw error;
       if (!updated) return reply(409, { error: "Command not found, already processed, or not assigned to this device" });
       await db.from("pc_events").insert({
         owner_id: device.owner_id, device_id: device.id,
-        event_type: result === "acknowledged" ? "remote_lock_completed" : "remote_lock_failed",
+        event_type: result === "acknowledged" ? "remote_command_completed" : "remote_command_failed",
         summary: summary || (result === "acknowledged" ? "Remote lock requested" : "Remote lock failed"),
         occurred_at: now,
       });
