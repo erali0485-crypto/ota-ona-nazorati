@@ -17,6 +17,16 @@ $PublishableKey = (Get-Content $KeyFile -Raw).Trim()
 if ($DeviceToken.Length -lt 32 -or !$PublishableKey.StartsWith('sb_publishable_')) {
   throw 'Device token or publishable key format is invalid.'
 }
+if (-not ('OtaOnaForegroundApp' -as [type])) {
+  Add-Type -TypeDefinition @'
+using System;
+using System.Runtime.InteropServices;
+public static class OtaOnaForegroundApp {
+  [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
+  [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint processId);
+}
+'@
+}
 if (-not ('OtaOnaSessionLock' -as [type])) {
   Add-Type -TypeDefinition @'
 using System.Runtime.InteropServices;
@@ -31,10 +41,47 @@ $Headers = @{
   'apikey' = $PublishableKey
 }
 $NextHeartbeat = [DateTime]::MinValue
+$NextUsageFlush = (Get-Date).AddMinutes(5)
+$ForegroundSeconds = @{}
+$LastForegroundKey = ''
+$LastForegroundTick = Get-Date
 Add-Content -LiteralPath $LogFile -Value ("{0} START command-polling agent" -f (Get-Date -Format s))
 
 while ($true) {
   try {
+    # Track only the foreground application's executable name; do not collect window titles or typed content.
+    $nowLocal = Get-Date
+    $hwnd = [OtaOnaForegroundApp]::GetForegroundWindow()
+    [uint32]$pidValue = 0
+    if ($hwnd -ne [IntPtr]::Zero) { [void][OtaOnaForegroundApp]::GetWindowThreadProcessId($hwnd, [ref]$pidValue) }
+    $foregroundKey = ''
+    if ($pidValue -gt 0) {
+      try { $foregroundKey = (Get-Process -Id $pidValue -ErrorAction Stop).ProcessName } catch { $foregroundKey = '' }
+    }
+    $elapsed = [Math]::Max(0, [Math]::Min(15, ($nowLocal - $LastForegroundTick).TotalSeconds))
+    if ($LastForegroundKey -and $elapsed -gt 0) {
+      if (-not $ForegroundSeconds.ContainsKey($LastForegroundKey)) { $ForegroundSeconds[$LastForegroundKey] = 0.0 }
+      $ForegroundSeconds[$LastForegroundKey] += $elapsed
+    }
+    $LastForegroundKey = $foregroundKey
+    $LastForegroundTick = $nowLocal
+    if ($nowLocal -ge $NextUsageFlush) {
+      foreach ($appName in @($ForegroundSeconds.Keys)) {
+        $minutes = [Math]::Floor($ForegroundSeconds[$appName] / 60)
+        if ($minutes -gt 0) {
+          $summary = @{ package = $appName; package_id = $appName; minutes_5m = $minutes; source = 'windows_foreground_app' } | ConvertTo-Json -Compress
+          $event = @{ kind = 'event'; event_type = 'app_usage'; summary = $summary } | ConvertTo-Json -Compress
+          try {
+            [void](Invoke-RestMethod -Method Post -Uri $IngestEndpoint -Headers $Headers -ContentType 'application/json' -Body $event -TimeoutSec 15)
+            Add-Content -LiteralPath $LogFile -Value ("{0} APP_USAGE app={1} minutes={2}" -f (Get-Date -Format s), $appName, $minutes)
+          } catch {
+            Add-Content -LiteralPath $LogFile -Value ("{0} APP_USAGE ERROR app={1} {2}" -f (Get-Date -Format s), $appName, $_.Exception.Message)
+          }
+        }
+      }
+      $ForegroundSeconds = @{}
+      $NextUsageFlush = $nowLocal.AddMinutes(5)
+    }
     if ((Get-Date) -ge $NextHeartbeat) {
       $health = @{
         kind = 'heartbeat'
