@@ -9,7 +9,7 @@ const db = createClient(supabaseUrl, serviceKey, { auth: { persistSession: false
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, apikey, content-type",
+  "Access-Control-Allow-Headers": "authorization, apikey, content-type, x-device-token",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
   "Content-Type": "application/json; charset=utf-8",
   "Cache-Control": "no-store",
@@ -27,8 +27,8 @@ Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
   if (req.method !== "POST") return reply(405, { error: "POST only" });
   try {
-    const auth = req.headers.get("authorization") || "";
-    const match = auth.match(/^Bearer\s+([A-Za-z0-9_-]{32,160})$/);
+    const token = req.headers.get("x-device-token") || "";
+    const match = token.match(/^([A-Za-z0-9_-]{32,160})$/);
     if (!match) return reply(401, { error: "Device token required" });
     const tokenHash = await sha256Hex(match[1]);
     const { data: device, error: deviceError } = await db
