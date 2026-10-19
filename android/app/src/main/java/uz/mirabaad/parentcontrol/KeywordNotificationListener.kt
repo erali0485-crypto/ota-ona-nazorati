@@ -18,12 +18,12 @@ class KeywordNotificationListener : NotificationListenerService() {
     private val executor = Executors.newSingleThreadExecutor()
     private val endpoint = "https://dhquvmipvfvvlisfhfaz.supabase.co/functions/v1/device-ingest"
     private val keywords = listOf(
-        "жиҳодга брамиз", "жиҳодга борамиз", "бродар",
+        "жиҳодга брамиз", "жиходга брамиз", "жиҳодга борамиз", "жиходга борамиз", "бродар",
         "пул бермасанг мазангни қочираман",
         "мен ҳоир уйдагиларни алдаб чиқаман",
         "мен ҳозир уйдагиларни алдаб чиқаман",
         "даданг ойинг билмасин", "букун кел", "бораман",
-        "бораолмайман", "соғиндим", "менҳам", "мен ҳам"
+        "бораолмайман", "соғиндим", "согиндим", "менҳам", "мен ҳам",        "қачон кўришамиз", "качон куришамиз"
     )
 
     override fun onNotificationPosted(sbn: StatusBarNotification) {
@@ -35,7 +35,7 @@ class KeywordNotificationListener : NotificationListenerService() {
         if (sbn.packageName == packageName || sbn.packageName.startsWith("com.android.systemui")) return
         val extras = sbn.notification.extras ?: return
         val title = extras.getCharSequence("android.title")?.toString().orEmpty()
-        val text = extras.getCharSequence("android.text")?.toString().orEmpty()
+        val text = extras.getCharSequence("android.text")?.toString().orEmpty()        val bigText = extras.getCharSequence("android.bigText")?.toString().orEmpty()
         val lines = extras.getCharSequenceArray("android.textLines")?.joinToString("\n") { it.toString() }.orEmpty()
         val visibleText = listOf(title, text, lines).filter { it.isNotBlank() }.distinct().joinToString("\n").take(3000)
         if (visibleText.isBlank()) return
