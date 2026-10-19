@@ -1,6 +1,7 @@
 package uz.mirabaad.parentcontrol
 
 import android.app.Activity
+import android.app.AlertDialog
 import android.app.AppOpsManager
 import android.app.usage.UsageStatsManager
 import android.content.Context
@@ -11,6 +12,7 @@ import android.view.ViewGroup
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.*
+import android.widget.Toast
 import org.json.JSONObject
 import java.net.HttpURLConnection
 import java.net.URL
@@ -51,15 +53,39 @@ class MainActivity : Activity() {
         root.addView(Button(this).apply { text="Охирги 24 соат статистикаси"; setOnClickListener { showUsage() } },params())
         root.addView(Button(this).apply { text="Сақлаш ва статистикани серверга юбориш"; setOnClickListener {
             prefs.edit().putString("name",nameField.text.toString().trim()).putString("token",tokenField.text.toString().trim()).putString("key",keyField.text.toString().trim()).apply()
-            scheduleUsageSync()
-            connect()
+            requestDataConsent {
+                scheduleUsageSync()
+                connect()
+            }
         } },params())
         status=TextView(this).apply { text="Ҳолат: ҳали уланмаган"; textSize=14f; setPadding(0,12,0,12) }; root.addView(status)
         usage=TextView(this).apply { textSize=14f; setTextIsSelectable(true) }
         root.addView(ScrollView(this).apply { addView(usage) },LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,0,1f))
         setContentView(root); showUsage()
-        if (prefs.getString("token", "").orEmpty().length >= 32 && prefs.getString("key", "").orEmpty().startsWith("sb_publishable_")) scheduleUsageSync()
+        if (prefs.getString("token", "").orEmpty().length >= 32 && prefs.getString("key", "").orEmpty().startsWith("sb_publishable_")) {
+            Toast.makeText(this, "Доим назоратдасиз, болаларим", Toast.LENGTH_SHORT).show()
+            requestDataConsent { scheduleUsageSync() }
+        } else {
+            Toast.makeText(this, "Доим назоратдасиз, болаларим", Toast.LENGTH_SHORT).show()
+        }
     }
+    private fun requestDataConsent(onGranted: () -> Unit) {
+        if (prefs.getBoolean("data_consent_granted", false)) {
+            onGranted()
+            return
+        }
+        AlertDialog.Builder(this)
+            .setTitle("Маълумот юборишга рухсат")
+            .setMessage("Бу илова қурилманинг ишлаётганини текшириш ва ўрнатилган иловалардан фойдаланиш вақти статистикасини ота-она назорати панелига юбориши мумкин. Шахсий чатлар, хабарлар матни ва клавиатурада ёзилган сўзлар йиғилмайди. Давом этиш учун бола ва ота-она рухсати керак.")
+            .setPositiveButton("Рухсат бераман") { _, _ ->
+                prefs.edit().putBoolean("data_consent_granted", true).apply()
+                onGranted()
+            }
+            .setNegativeButton("Рухсат бермайман", null)
+            .setCancelable(false)
+            .show()
+    }
+
     private fun openParentPanel() {
         val web = WebView(this)
         web.settings.javaScriptEnabled = true
