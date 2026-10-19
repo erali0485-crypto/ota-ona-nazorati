@@ -50,6 +50,7 @@ class MainActivity : Activity() {
         keyField=EditText(this).apply { hint="Supabase publishable key (sb_publishable_…)"; setSingleLine(true); setText(prefs.getString("key","")) }
         root.addView(keyField,params())
         root.addView(Button(this).apply { text="Фойдаланиш вақтига рухсат бериш"; setOnClickListener { startActivity(Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS)) } },params())
+        root.addView(Button(this).apply { text="Хавфли сўзлар учун хабарномалар рухсати"; setOnClickListener { requestNotificationMonitoringConsent() } },params())
         root.addView(Button(this).apply { text="Охирги 24 соат статистикаси"; setOnClickListener { showUsage() } },params())
         root.addView(Button(this).apply { text="Сақлаш ва статистикани серверга юбориш"; setOnClickListener {
             prefs.edit().putString("name",nameField.text.toString().trim()).putString("token",tokenField.text.toString().trim()).putString("key",keyField.text.toString().trim()).apply()
@@ -69,6 +70,20 @@ class MainActivity : Activity() {
             Toast.makeText(this, "Доим назоратдасиз, болаларим", Toast.LENGTH_SHORT).show()
         }
     }
+    private fun requestNotificationMonitoringConsent() {
+        AlertDialog.Builder(this)
+            .setTitle("Хабарномаларни текшириш")
+            .setMessage("Фақат телефон экранида хабарнома сифатида кўринадиган матн хавфли иборалар рўйхати бўйича текширилади. Мос келса, илова номи, топилган ибора ва хабарнома матни ота-она панелига юборилади. Яширин чатлар ўқилмайди. Буни ёқиш учун бола ва ота-она розилиги керак.")
+            .setPositiveButton("Рухсат ва созламалар") { _, _ ->
+                prefs.edit().putBoolean("keyword_notification_consent", true).apply()
+                startActivity(Intent("android.settings.ACTION_NOTIFICATION_LISTENER_SETTINGS"))
+            }
+            .setNegativeButton("Бекор қилиш") { _, _ ->
+                prefs.edit().putBoolean("keyword_notification_consent", false).apply()
+            }
+            .show()
+    }
+
     private fun requestDataConsent(onGranted: () -> Unit) {
         if (prefs.getBoolean("data_consent_granted", false)) {
             onGranted()
@@ -76,7 +91,7 @@ class MainActivity : Activity() {
         }
         AlertDialog.Builder(this)
             .setTitle("Маълумот юборишга рухсат")
-            .setMessage("Бу илова қурилманинг ишлаётганини текшириш ва ўрнатилган иловалардан фойдаланиш вақти статистикасини ота-она назорати панелига юбориши мумкин. Шахсий чатлар, хабарлар матни ва клавиатурада ёзилган сўзлар йиғилмайди. Давом этиш учун бола ва ота-она рухсати керак.")
+            .setMessage("Бу илова қурилманинг ишлаётганини текшириш ва ўрнатилган иловалардан фойдаланиш вақти статистикасини ота-она назорати панелига юбориши мумкин. Шахсий чатлар тўғридан-тўғри очилмайди. Агар алоҳида хабарнома текшириш рухсати ёқилса, фақат экранда кўринган хабарномалар хавфли иборалар бўйича текширилиши ва мос келган матн панелга юборилиши мумкин. Клавиатурада ёзилган сўзлар йиғилмайди. Давом этиш учун бола ва ота-она рухсати керак.")
             .setPositiveButton("Рухсат бераман") { _, _ ->
                 prefs.edit().putBoolean("data_consent_granted", true).apply()
                 onGranted()
